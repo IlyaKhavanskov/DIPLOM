@@ -6,7 +6,7 @@ import  satellites_pb2 as s_pb2 # импорт сообщения - списка
 
 baseurl = 'http://127.0.0.1:5000/'
 
-path = 'correct/1/2/3'
+path = 'correct/1.0/2.0/3.0'
 URL = urljoin(baseurl, path)
 
 
@@ -33,7 +33,7 @@ response = rq.post(
     data=msg.SerializeToString(),         
 
 
-    
+
     headers={
         "Content-Type": "application/x-protobuf",
         "Accept": "application/x-protobuf",

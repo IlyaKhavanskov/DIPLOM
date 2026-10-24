@@ -14,11 +14,14 @@ app = Flask(__name__)
 def hello_world():
     return 'Hello, World!'
 
-@app.route('/correct/<x>/<y>/<z>', methods=['GET','POST'])
+@app.route('/correct/<float:x>/<float:y>/<float:z>', methods=['GET','POST'])
+@app.route('/correct/<int:x>/<int:y>/<int:z>', methods=['GET','POST'])
 def get_xyz(x, y, z):  
     if request.method == 'GET':
-        answer = subprocess.run(["python3", "base_station.py", x, y,z] ,
+        answer = subprocess.run(['python', "base_station.py", str(x), str(y),str(z)] ,
             capture_output=True, text=True )
+        if answer.returncode != 0:
+            return Response(answer.stderr, status=500, mimetype='text/plain')
         if answer.stdout:
         # парсим результат работы скрипта
             line = answer.stdout.strip()          
@@ -38,9 +41,7 @@ def get_xyz(x, y, z):
 
 @app.route('/satellites', methods=['GET','POST'])
 def get_satellites():
-# передается список номеров спутников
     if request.method == 'POST':
-
         binary_data = request.data
         global lst_salellites
         satellites = s_pb2.SatelliteList()
@@ -51,4 +52,4 @@ def get_satellites():
 
     
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True)
