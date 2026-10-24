@@ -2,7 +2,11 @@ from flask import Flask, request , Response # Импортируем request и�
 import requests as rq
 import base_station as bs
 import subprocess
-import coordinates_pb2 as c_pb2
+import coordinates_pb2 as c_pb2 # импорт сообщения - поправки координат
+import  satellites_pb2 as s_pb2 # импорт сообщения - списка используемых спутников
+
+lst_salellites = []
+
 
 app = Flask(__name__)
 
@@ -30,6 +34,21 @@ def get_xyz(x, y, z):
         coords = c_pb2.Coordinates(x=float(x), y=float(y), z=float(z))
         return Response(coords.SerializeToString(),
                         mimetype='application/x-protobuf')
+
+
+@app.route('/satellites', methods=['GET','POST'])
+def get_satellites():
+# передается список номеров спутников
+    if request.method == 'POST':
+
+        binary_data = request.data
+        global lst_salellites
+        satellites = s_pb2.SatelliteList()
+        satellites.ParseFromString(binary_data)
+        lst_salellites = list(satellites.names) 
+
+        return Response(b"OK", status=200, mimetype='text/plain')
+
     
 if __name__ == '__main__':
     app.run(debug=True)
