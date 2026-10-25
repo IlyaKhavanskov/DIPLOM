@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 
 lst_salellites = [] # список спутников используемых потребителем
 
-lst_ip_bs = ['127.0.0.2'] # список ip базовых станций
+lst_ip_bs = ['127.0.0.1'] # список ip базовых станций
 
 X_user = None
 Y_user = None
@@ -23,23 +23,42 @@ def hello_world():
 
 @app.route('/correction', methods=['GET','POST'])
 def correction():
-    if  request.method == 'GET':
+    global X_user, Y_user, Z_user
+    # if  request.method == 'GET':
 
-        for ip in lst_ip_bs:
-            baseurl = 'http://' + str(ip) + ':5000'
-            path = '/correct/X_user/Y_user/Z_user'
-            URL = urljoin(baseurl, path)
-            response = rq.get(URL)
-            print(response.status_code)
-        return  response.status_code
+    #     for ip in lst_ip_bs:
+    #         baseurl = 'http://' + str(ip) + ':5001'
+    #         x, y, z = X_user or 0, Y_user or 0, Z_user or 0
+    #         path = f'/correct/{x}/{y}/{z}'
+    #         URL = urljoin(baseurl, path)
+    #         response = rq.get(URL)
+    #         print(response.status_code)
+    #     return Response(response.content, status=response.status_code,
+    #                     content_type=response.headers.get('Content-Type', 'text/plain'))
     
     if request.method == 'POST':
         binary_data = request.data
         coords = c_pb2.Coordinates()
         coords.ParseFromString(binary_data)
-        global X_user, Y_user, Z_user
-        
-        return Response(b"OK", status=200, mimetype='text/plain')
+        X_user = coords.x
+        Y_user = coords.y
+        Z_user = coords.z
+
+        URL = 'http://127.0.0.1:5001/correct'
+
+        response = rq.post(
+            URL,
+            data = binary_data,
+            headers={
+                    "Content-Type": "application/x-protobuf",
+                    "Accept": "application/x-protobuf",
+            },
+        )
+        print("Статус-код:", response.status_code)
+        print(f'x={X_user} y={Y_user} z={Z_user}')
+
+        return Response(response.content, status=response.status_code,
+                        content_type=response.headers.get('Content-Type', 'text/plain'))
 
 
 @app.route('/satellites', methods=['GET','POST'])

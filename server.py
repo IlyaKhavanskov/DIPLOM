@@ -2,6 +2,7 @@ from flask import Flask, request , Response # Импортируем request и�
 import requests as rq
 import base_station as bs
 import subprocess
+import sys
 import coordinates_pb2 as c_pb2 # импорт сообщения - поправки координат
 import  satellites_pb2 as s_pb2 # импорт сообщения - списка используемых спутников
 
@@ -14,11 +15,18 @@ app = Flask(__name__)
 def hello_world():
     return 'Hello, World!'
 
-@app.route('/correct/<float:x>/<float:y>/<float:z>', methods=['GET','POST'])
-@app.route('/correct/<int:x>/<int:y>/<int:z>', methods=['GET','POST'])
-def get_xyz(x, y, z):  
-    if request.method == 'GET':
-        answer = subprocess.run(['python', "base_station.py", str(x), str(y),str(z)] ,
+
+
+@app.route('/correct', methods=['GET','POST'])
+def get_xyz():  
+    if request.method == 'POST':
+
+        coords = c_pb2.Coordinates()
+        coords.ParseFromString(request.data) 
+
+        x_in, y_in, z_in = coords.x, coords.y, coords.z
+
+        answer = subprocess.run([sys.executable, "base_station.py", str(x_in), str(y_in),str(z_in)] ,
             capture_output=True, text=True )
         if answer.returncode != 0:
             return Response(answer.stderr, status=500, mimetype='text/plain')
@@ -31,12 +39,18 @@ def get_xyz(x, y, z):
             binary_data = coords.SerializeToString()
             # return f'X={dX}, Y={dY}, Z={dZ}'
             return Response(binary_data, mimetype='application/x-protobuf')
-        
-    
-    if request.method == 'POST':
-        coords = c_pb2.Coordinates(x=float(x), y=float(y), z=float(z))
-        return Response(coords.SerializeToString(),
-                        mimetype='application/x-protobuf')
+        return Response("Base station returned no correction", status=500, mimetype='text/plain')
+
+    answer = subprocess.run([sys.executable, "base_station.py", str(x), str(y), str(z)],
+                            capture_output=True, text=True)
+    if answer.returncode != 0:
+        return Response(answer.stderr, status=500, mimetype='text/plain')
+    try:
+        dX, dY, dZ = map(float, answer.stdout.split())
+    except ValueError:
+        return Response("Invalid correction returned by base station", status=500, mimetype='text/plain')
+    coords = c_pb2.Coordinates(x=dX, y=dY, z=dZ)
+    return Response(coords.SerializeToString(), mimetype='application/x-protobuf')
 
 
 @app.route('/satellites', methods=['GET','POST'])
@@ -52,4 +66,4 @@ def get_satellites():
 
     
 if __name__ == '__main__':
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5001, debug=True)
