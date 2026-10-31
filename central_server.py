@@ -1,11 +1,12 @@
-from flask import Flask, request , Response # Импортируем request из flask
-import requests as rq
+from quart import  request ,Quart, Response # Импортируем request 
 import subprocess
 import coordinates_pb2 as c_pb2 # импорт сообщения - поправки координат
 import  satellites_pb2 as s_pb2 # импорт сообщения - списка используемых спутников
 from urllib.parse import urljoin
 import math
+import httpx
 import asyncio
+import sys
 
 lst_salellites = [] # список спутников используемых потребителем
 
@@ -29,56 +30,45 @@ X_user = None
 Y_user = None
 Z_user = None
 
-app = Flask(__name__)
+app = Quart(__name__)
 
 @app.route('/')
-def hello_world():
+async def hello_world():
     return 'Hello, World!'
 
 
 @app.route('/correction', methods=['POST'])
-def correction():
-    binary_data = request.data
+async def correction():
+    binary_data = await request.data
     coords = c_pb2.Coordinates()
     coords.ParseFromString(binary_data)
     X_user, Y_user, Z_user = coords.x, coords.y, coords.z
 
+    coords = c_pb2.Coordinates(x=1,y=1,z=1)
+    binary_data = coords.SerializeToString()
+    return Response(binary_data, mimetype='application/x-protobuf')
+
     correction = []
-    for station in lst_ip_bs:
-        URL = f"http://127.0.0.1:{station['port']}/correct"
-        try:
-            response = rq.post(
-                URL, data=binary_data, timeout=10,
-                headers={"Content-Type": "application/x-protobuf"},
-            )
-        except rq.RequestException as e:
-            print(f"Станция {station['station']} недоступна: {e}")
-            continue
+    #         dist = math.sqrt((X_user - station['x'])**2 +
+    #                      (Y_user - station['y'])**2 +
+    #                      (Z_user - station['z'])**2)
+    #     w = 1 / max(dist, 1e-6)
 
-        if response.status_code != 200:
-            print(f"Станция {station['station']}: {response.status_code} {response.text[:200]}")
-            continue
+    #     delta = c_pb2.Coordinates()
+    #     delta.ParseFromString(response.content)
+    #     correction.append((w, delta.x, delta.y, delta.z))
 
-        dist = math.sqrt((X_user - station['x'])**2 +
-                         (Y_user - station['y'])**2 +
-                         (Z_user - station['z'])**2)
-        w = 1 / max(dist, 1e-6)
+    # if not correction:
+    #     return Response(b"No stations available", status=502, mimetype='text/plain')
 
-        delta = c_pb2.Coordinates()
-        delta.ParseFromString(response.content)
-        correction.append((w, delta.x, delta.y, delta.z))
-
-    if not correction:
-        return Response(b"No stations available", status=502, mimetype='text/plain')
-
-    sw = sum(w for w, *_ in correction)
-    result = c_pb2.Coordinates(
-        x=sum(w * dx for w, dx, _, _ in correction) / sw,
-        y=sum(w * dy for w, _, dy, _ in correction) / sw,
-        z=sum(w * dz for w, _, _, dz in correction) / sw,
-    )
-    return Response(result.SerializeToString(),
-                    mimetype='application/x-protobuf')
+    # sw = sum(w for w, *_ in correction)
+    # result = c_pb2.Coordinates(
+    #     x=sum(w * dx for w, dx, _, _ in correction) / sw,
+    #     y=sum(w * dy for w, _, dy, _ in correction) / sw,
+    #     z=sum(w * dz for w, _, _, dz in correction) / sw,
+    # )
+    # return Response(result.SerializeToString(),
+    #                 mimetype='application/x-protobuf')
 
 
 
@@ -166,7 +156,7 @@ def correction():
 #     # return Response(b"OK", status=200, mimetype='text/plain')
 
 @app.route('/satellites', methods=['GET','POST'])
-def get_satellites():
+async def get_satellites():
 # передается список номеров спутников от потребителя
     if request.method == 'POST':
 
