@@ -7,10 +7,11 @@ import math
 import httpx
 import asyncio
 import sys
+import user_class
 
 lst_salellites = [] # список спутников используемых потребителем
 
-lst_ip_bs = [
+lst_bs = [
         { 'station': 1,
             'port':5001,
             'x': 2850631.2464619204 ,
@@ -39,10 +40,24 @@ async def hello_world():
 
 @app.route('/correction', methods=['POST'])
 async def correction():
-    binary_data = await request.data
+    binary_data = await request.body
+    # в quart нет request.data есть request.body
     coords = c_pb2.Coordinates()
     coords.ParseFromString(binary_data)
     X_user, Y_user, Z_user = coords.x, coords.y, coords.z
+
+    
+
+    async with httpx.AsyncClient() as client:
+        tasks = []
+        for  station in lst_bs:
+            tasks.append(client.get('http://127.0.0.1:' + str(station['port']) + '/correct'))
+
+        responses = await asyncio.gather(*tasks)
+        for response in  responses:
+            print(response.status_code)
+
+
 
     coords = c_pb2.Coordinates(x=1,y=1,z=1)
     binary_data = coords.SerializeToString()
