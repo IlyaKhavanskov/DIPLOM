@@ -9,6 +9,17 @@ import asyncio
 import sys
 import user_class
 
+
+users = {}   # ip -> User
+
+# реализация многопользовательского режима
+def get_user(ip):
+    """Возвращает существующего пользователя или создаёт нового."""
+    if ip not in users:
+        users[ip] = user_class.User(ip=ip)
+    return users[ip]
+
+
 lst_salellites = [] # список спутников используемых потребителем
 
 lst_bs = [
@@ -45,7 +56,9 @@ async def correction():
     # в quart нет request.data есть request.body
     coords = c_pb2.Coordinates()
     coords.ParseFromString(binary_data)
-    X_user, Y_user, Z_user = coords.x, coords.y, coords.z
+
+    user = get_user(request.remote_addr)
+    user.x, user.y, user.z = coords.x, coords.y, coords.z
                         
     sw = sx = sy = sz = 0.0   
                         
@@ -71,141 +84,34 @@ async def correction():
             dx, dy, dz = correction.x, correction.y, correction.z # распарсили вектор коррекции
             # idw коррекция
 
-            W = 1 / max(math.sqrt((X_user - station['x'])**2 +
-                                (Y_user - station['y'])**2 +
-                                (Z_user - station['z'])**2), 1e-6)
+            W = 1 / max(math.sqrt((user.x - station['x'])**2 +
+                                (user.y - station['y'])**2 +
+                                (user.z - station['z'])**2), 1e-6)
                                 
             sw += W
             sx += W * dx
             sy += W * dy
             sz += W * dz
 
+    user.dx, user.dy, user.dz = sx / sw, sy / sw, sz / sw   # сохраняем поправку в пользователе
 
 
 
-    coords = c_pb2.Coordinates(x=sx / sw, y=sy / sw, z=sz / sw)
+    coords = c_pb2.Coordinates(x=user.dx, y=user.dy, z=user.dz)
     binary_data = coords.SerializeToString()
     return Response(binary_data, mimetype='application/x-protobuf')
 
-    correction = []
-    #         dist = math.sqrt((X_user - station['x'])**2 +
-    #                      (Y_user - station['y'])**2 +
-    #                      (Z_user - station['z'])**2)
-    #     w = 1 / max(dist, 1e-6)
-
-    #     delta = c_pb2.Coordinates()
-    #     delta.ParseFromString(response.content)
-    #     correction.append((w, delta.x, delta.y, delta.z))
-
-    # if not correction:
-    #     return Response(b"No stations available", status=502, mimetype='text/plain')
-
-    # sw = sum(w for w, *_ in correction)
-    # result = c_pb2.Coordinates(
-    #     x=sum(w * dx for w, dx, _, _ in correction) / sw,
-    #     y=sum(w * dy for w, _, dy, _ in correction) / sw,
-    #     z=sum(w * dz for w, _, _, dz in correction) / sw,
-    # )
-    # return Response(result.SerializeToString(),
-    #                 mimetype='application/x-protobuf')
 
 
-
-
-# @app.route('/correction', methods=['GET','POST'])
-# def correction():
-#     global X_user, Y_user, Z_user
-#     # if  request.method == 'GET':
-
-#     #     for ip in lst_ip_bs:
-#     #         baseurl = 'http://' + str(ip) + ':5001'
-#     #         x, y, z = X_user or 0, Y_user or 0, Z_user or 0
-#     #         path = f'/correct/{x}/{y}/{z}'
-#     #         URL = urljoin(baseurl, path)
-#     #         response = rq.get(URL)
-#     #         print(response.status_code)
-#     #     return Response(response.content, status=response.status_code,
-#     #                     content_type=response.headers.get('Content-Type', 'text/plain'))
-    
-#     if request.method == 'POST':
-#         binary_data = request.data
-#         coords = c_pb2.Coordinates()
-#         coords.ParseFromString(binary_data)
-#         X_user = coords.x
-#         Y_user = coords.y
-#         Z_user = coords.z
-#         #  код рабочий
-#         # URL = 'http://127.0.0.1:5001/correct'
-
-#         # response = rq.post(
-#         #     URL,
-#         #     data = binary_data,
-#         #     headers={
-#         #             "Content-Type": "application/x-protobuf",
-#         #             "Accept": "application/x-protobuf",
-#         #     },
-#         # )
-#         # print("Статус-код:", response.status_code)
-#         # print(f'x={X_user} y={Y_user} z={Z_user}')
-
-#         # return Response(response.content, status=response.status_code,
-#         #                 content_type=response.headers.get('Content-Type', 'text/plain'))
-
-#         #  то же самое в цикле
-#         correction = [] # весовые коэффициенты для IDW коррекции
-#         for station in lst_ip_bs:
-#             URL = 'http://127.0.0.1:' + str(station['port']) + '/correct'
-#             response = rq.post(
-#                         URL,
-#                         data = binary_data,
-#                         headers={
-#                                 "Content-Type": "application/x-protobuf",
-#                                 "Accept": "application/x-protobuf",
-#                         },
-#                     )
-#             W = 1/math.sqrt( (X_user - station['x'])**2 + (Y_user - station['y'])**2 + \
-#                                 ((Z_user - station['z'])**2) ) 
-#             delta_coords = c_pb2.Coordinates()
-#             delta_coords.ParseFromString(response.content)
-
-#             correction.append({
-#                         'station':station['station'],
-#                         'w':W,
-#                         'dx':coords.x,
-#                         'dy':coords.y,
-#                         'dz':coords.z
-#             })
-
-
-
-            
-#             print("Статус-код:", response.status_code)
-#             print(f'станция { station['station'] }')
-
-#         result = c_pb2.Coordinates(
-#             x=0.0,
-#             y=0.0,
-#             z=0.0,
-#         )
-
-
-#         return Response(result.SerializeToString(),
-#                 mimetype='application/x-protobuf')    
-
-#     # return Response(b"OK", status=200, mimetype='text/plain')
-
-@app.route('/satellites', methods=['GET','POST'])
+@app.route('/satellites', methods=['POST'])
 async def get_satellites():
-# передается список номеров спутников от потребителя
-    if request.method == 'POST':
+    sats = s_pb2.SatelliteList()
+    sats.ParseFromString(await request.get_data())
 
-        binary_data = request.data
-        global lst_salellites
-        satellites = s_pb2.SatelliteList()
-        satellites.ParseFromString(binary_data)
-        lst_salellites = list(satellites.names) 
+    user = get_user(request.remote_addr)
+    user.satellite_lst = list(sats.names)
 
-        return Response(b"OK", status=200, mimetype='text/plain')
+    return Response(b"OK", status=200, mimetype='text/plain')
 
     
 if __name__ == '__main__':
