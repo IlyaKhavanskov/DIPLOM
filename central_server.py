@@ -40,7 +40,8 @@ async def hello_world():
 
 @app.route('/correction', methods=['POST'])
 async def correction():
-    binary_data = await request.body
+    binary_data = await request.get_data()
+    
     # в quart нет request.data есть request.body
     coords = c_pb2.Coordinates()
     coords.ParseFromString(binary_data)
@@ -51,11 +52,25 @@ async def correction():
     async with httpx.AsyncClient() as client:
         tasks = []
         for  station in lst_bs:
-            tasks.append(client.get('http://127.0.0.1:' + str(station['port']) + '/correct'))
+            tasks.append(client.post(f"http://127.0.0.1:{station['port']}/correct",
+                        data = binary_data,
+                        headers={
+                                "Content-Type": "application/x-protobuf",
+                                "Accept": "application/x-protobuf",
+                        })
+                        
+                        )
 
-        responses = await asyncio.gather(*tasks)
-        for response in  responses:
+        # responses = await asyncio.gather(*tasks)
+        for task in asyncio.as_completed(tasks) :
+            response = await task # получили вектор коррекции
+            # парсим вектор коррекции из ответа
             print(response.status_code)
+            correction = c_pb2.Coordinates()
+            correction.ParseFromString(response.content)
+            dx, dy, dz = correction.x, correction.y, correction.z # распарсили вектор коррекции
+            
+
 
 
 
