@@ -46,9 +46,9 @@ async def correction():
     coords = c_pb2.Coordinates()
     coords.ParseFromString(binary_data)
     X_user, Y_user, Z_user = coords.x, coords.y, coords.z
-
-    
-
+                        
+    sw = sx = sy = sz = 0.0   
+                        
     async with httpx.AsyncClient() as client:
         tasks = []
         for  station in lst_bs:
@@ -60,7 +60,7 @@ async def correction():
                         })
                         
                         )
-
+                        
         # responses = await asyncio.gather(*tasks)
         for task in asyncio.as_completed(tasks) :
             response = await task # получили вектор коррекции
@@ -69,12 +69,21 @@ async def correction():
             correction = c_pb2.Coordinates()
             correction.ParseFromString(response.content)
             dx, dy, dz = correction.x, correction.y, correction.z # распарсили вектор коррекции
-            
+            # idw коррекция
+
+            W = 1 / max(math.sqrt((X_user - station['x'])**2 +
+                                (Y_user - station['y'])**2 +
+                                (Z_user - station['z'])**2), 1e-6)
+                                
+            sw += W
+            sx += W * dx
+            sy += W * dy
+            sz += W * dz
 
 
 
 
-    coords = c_pb2.Coordinates(x=1,y=1,z=1)
+    coords = c_pb2.Coordinates(x=sx / sw, y=sy / sw, z=sz / sw)
     binary_data = coords.SerializeToString()
     return Response(binary_data, mimetype='application/x-protobuf')
 
