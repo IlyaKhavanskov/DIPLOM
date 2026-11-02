@@ -8,7 +8,27 @@ import httpx
 import asyncio
 import sys
 import user_class
+import logging
 
+# общий лог сервера (Quart, Hypercorn, ошибки)
+logging.basicConfig(
+    filename="central_server.log",
+    level=logging.INFO,
+    format="%(asctime)s | %(message)s",
+    force=True,
+)
+
+# приглушаем  библиотеки
+# logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# чистый лог данных пользователя
+log = logging.getLogger("server")
+log.setLevel(logging.INFO)
+log.propagate = False # не дублировать в central_server.log
+
+handler = logging.FileHandler("user_data.log", encoding="utf-8")
+handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
+log.addHandler(handler)
 
 users = {}   # ip -> User
 
@@ -18,6 +38,12 @@ def get_user(ip):
     if ip not in users:
         users[ip] = user_class.User(ip=ip)
     return users[ip]
+
+def find_user(ip):
+    """Возвращает пользователя по ip или None, если он ещё не зарегистрирован."""
+    return users.get(ip)
+# пользователь создается при передаче списка номеров спутников
+# в ручке correction проверяется его наличие
 
 
 lst_salellites = [] # список спутников используемых потребителем
@@ -38,9 +64,9 @@ lst_bs = [
                 }
             ] # список ip базовых станций для теста - порты
 
-X_user = None
-Y_user = None
-Z_user = None
+# X_user = None
+# Y_user = None
+# Z_user = None
 
 app = Quart(__name__)
 
@@ -58,6 +84,9 @@ async def correction():
     coords.ParseFromString(binary_data)
 
     user = get_user(request.remote_addr)
+    if user is None:
+        return Response("User not registered. Send /satellites first.",
+                        status=403, mimetype='text/plain')
     user.x, user.y, user.z = coords.x, coords.y, coords.z
                         
     sw = sx = sy = sz = 0.0   
@@ -95,6 +124,8 @@ async def correction():
 
     user.dx, user.dy, user.dz = sx / sw, sy / sw, sz / sw   # сохраняем поправку в пользователе
 
+    log.info(f"{request.remote_addr} | {user.x} | {user.y};\
+            {user.z} | {user.dx} | {user.dy} | {user.dz}")
 
 
     coords = c_pb2.Coordinates(x=user.dx, y=user.dy, z=user.dz)
