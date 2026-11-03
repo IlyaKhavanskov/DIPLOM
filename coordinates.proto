@@ -4,4 +4,11 @@ message Coordinates {
   double x = 1;
   double y = 2;
   double z = 3;
+// pr - precission - истинные координаты
+  double x_pr = 4;
+  double y_pr = 5;
+  double z_pr = 6;
+
+
+
 }
