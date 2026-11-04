@@ -83,49 +83,52 @@ async def correction():
     coords = c_pb2.Coordinates()
     coords.ParseFromString(binary_data)
 
-    user = get_user(request.remote_addr)
+    user = find_user(request.remote_addr)
     if user is None:
         return Response("User not registered. Send /satellites first.",
                         status=403, mimetype='text/plain')
+    # сырые координаты вычисленные по спутникам
     user.x, user.y, user.z = coords.x, coords.y, coords.z
+    # геодезически точные координаты
+    x_pr, y_pr, z_pr = coords.x_pr, coords.y_pr, coords.z_pr
                         
     sw = sx = sy = sz = 0.0   
                         
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10) as client:
         tasks = []
-        for  station in lst_bs:
-            tasks.append(client.post(f"http://127.0.0.1:{station['port']}/correct",
-                        data = binary_data,
-                        headers={
-                                "Content-Type": "application/x-protobuf",
-                                "Accept": "application/x-protobuf",
-                        })
-                        
-                        )
-                        
-        # responses = await asyncio.gather(*tasks)
-        for task in asyncio.as_completed(tasks) :
-            response = await task # получили вектор коррекции
-            # парсим вектор коррекции из ответа
-            print(response.status_code)
-            correction = c_pb2.Coordinates()
-            correction.ParseFromString(response.content)
-            dx, dy, dz = correction.x, correction.y, correction.z # распарсили вектор коррекции
-            # idw коррекция
+        for station in lst_bs:
+            tasks.append(
+                client.post(
+                    f"http://127.0.0.1:{station['port']}/correct",
+                    content=binary_data,
+                    headers={
+                        "Content-Type": "application/x-protobuf",
+                        "Accept": "application/x-protobuf",
+                    },
+                )
+            )
 
-            W = 1 / max(math.sqrt((user.x - station['x'])**2 +
-                                (user.y - station['y'])**2 +
-                                (user.z - station['z'])**2), 1e-6)
-                                
-            sw += W
-            sx += W * dx
-            sy += W * dy
-            sz += W * dz
+        responses = await asyncio.gather(*tasks)   # ждём один раз, получаем список ответов
+
+    for station, response in zip(lst_bs, responses):
+        response.raise_for_status()
+        print(response.status_code)
+        correction = c_pb2.Coordinates()
+        correction.ParseFromString(response.content)
+        dx, dy, dz = correction.x, correction.y, correction.z
+
+        W = 1 / max(math.sqrt((user.x - station['x'])**2 +
+                            (user.y - station['y'])**2 +
+                            (user.z - station['z'])**2), 1e-6)
+        sw += W
+        sx += W * dx
+        sy += W * dy
+        sz += W * dz
 
     user.dx, user.dy, user.dz = sx / sw, sy / sw, sz / sw   # сохраняем поправку в пользователе
 
-    log.info(f"{request.remote_addr} | {user.x} | {user.y};\
-            {user.z} | {user.dx} | {user.dy} | {user.dz}")
+    log.info(f"{request.remote_addr} | {user.x} | {user.y} |\
+            {user.z} | {x_pr} | {y_pr} | {z_pr} | {dx} | {dy} | {dz}")
 
 
     coords = c_pb2.Coordinates(x=user.dx, y=user.dy, z=user.dz)
@@ -146,4 +149,4 @@ async def get_satellites():
 
     
 if __name__ == '__main__':
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="127.0.0.1", port=5000, debug=True,  use_reloader=False)
