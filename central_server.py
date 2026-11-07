@@ -1,4 +1,4 @@
-from quart import  request ,Quart, Response # Импортируем request 
+from quart import  request ,Quart, Response , websocket# Импортируем request 
 import subprocess
 import coordinates_pb2 as c_pb2 # импорт сообщения - поправки координат
 import  satellites_pb2 as s_pb2 # импорт сообщения - списка используемых спутников
@@ -78,15 +78,20 @@ async def hello_world():
 @app.route('/correction', methods=['POST'])
 async def correction():
     binary_data = await request.get_data()
-    
-    # в quart нет request.data есть request.body
-    coords = c_pb2.Coordinates()
-    coords.ParseFromString(binary_data)
 
     user = find_user(request.remote_addr)
     if user is None:
         return Response("User not registered. Send /satellites first.",
                         status=403, mimetype='text/plain')
+    
+    if binary_data == b'delete':
+        users.pop(request.remote_addr, None)
+        return Response(b"OK", status=200)
+
+    # в quart нет request.data есть request.body
+    coords = c_pb2.Coordinates()
+    coords.ParseFromString(binary_data)
+
     # сырые координаты вычисленные по спутникам
     user.x, user.y, user.z = coords.x, coords.y, coords.z
     # геодезически точные координаты
@@ -125,16 +130,87 @@ async def correction():
         sy += W * dy
         sz += W * dz
 
-    user.dx, user.dy, user.dz = sx / sw, sy / sw, sz / sw   # сохраняем поправку в пользователе
+        user.dx, user.dy, user.dz = sx / sw, sy / sw, sz / sw   # сохраняем поправку в пользователе
 
-    log.info(f"{request.remote_addr} | {user.x} | {user.y} |\
-            {user.z} | {x_pr} | {y_pr} | {z_pr} | {dx} | {dy} | {dz}")
+        log.info(f"{request.remote_addr} | {user.x} | {user.y} |\
+                {user.z} | {x_pr} | {y_pr} | {z_pr} | {dx} | {dy} | {dz}")
 
 
     coords = c_pb2.Coordinates(x=user.dx, y=user.dy, z=user.dz)
     binary_data = coords.SerializeToString()
     return Response(binary_data, mimetype='application/x-protobuf')
 
+
+# ручка коррекции с использованием web socket
+@app.websocket('/ws')
+async def correction_ws():
+    try:
+        while True:
+            binary_data = await websocket.receive()
+            coords = c_pb2.Coordinates()
+            coords.ParseFromString(binary_data)
+                
+            user = find_user(websocket.remote_addr)
+            if user is None:
+                await websocket.send("User not registered. Send /satellites first.")
+                return
+            # сырые координаты вычисленные по спутникам
+            user.x, user.y, user.z = coords.x, coords.y, coords.z
+            # геодезически точные координаты
+            x_pr, y_pr, z_pr = coords.x_pr, coords.y_pr, coords.z_pr
+
+            sw = sx = sy = sz = 0.0   
+                
+            async with httpx.AsyncClient(timeout=10) as client:
+                tasks = []
+                for station in lst_bs:
+                    tasks.append(
+                        client.post(
+                        f"http://127.0.0.1:{station['port']}/correct",
+                            content=binary_data,
+                            headers={
+                                "Content-Type": "application/x-protobuf",
+                                "Accept": "application/x-protobuf",
+                            },
+                        )
+                    )
+
+                responses = await asyncio.gather(*tasks)   # ждём один раз, получаем список ответов
+
+            for station, response in zip(lst_bs, responses):
+                response.raise_for_status()
+                print(response.status_code)
+                correction = c_pb2.Coordinates()
+                correction.ParseFromString(response.content)
+                dx, dy, dz = correction.x, correction.y, correction.z
+
+                W = 1 / max(math.sqrt((user.x - station['x'])**2 +
+                                        (user.y - station['y'])**2 +
+                                        (user.z - station['z'])**2), 1e-6)
+                sw += W
+                sx += W * dx
+                sy += W * dy
+                sz += W * dz
+
+                user.dx, user.dy, user.dz = sx / sw, sy / sw, sz / sw   # сохраняем поправку в пользователе
+
+                user.ip =  websocket.remote_addr
+                log.info(f"{websocket.remote_addr} | {user.x} | {user.y} |\
+                        {user.z} | {x_pr} | {y_pr} | {z_pr} | {dx} | {dy} | {dz}")
+
+
+                coords = c_pb2.Coordinates(x=user.dx, y=user.dy, z=user.dz)
+                binary_data = coords.SerializeToString()
+
+                await websocket.send(binary_data)
+
+    except Exception as e:
+            print(f"Соединение закрыто или ошибка: {e}")
+
+            try:
+                users.pop(user.ip, None)
+            except Exception as e:
+                print(f"не получилось удалить пользователя {e}")
 
 
 @app.route('/satellites', methods=['POST'])

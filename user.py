@@ -69,7 +69,7 @@ session.headers.update({
 
 
 try:
-    rq.session.post("http://127.0.0.1:5000/satellites",
+    session.post("http://127.0.0.1:5000/satellites",
             data=sats.SerializeToString(),
             headers={"Content-Type": "application/x-protobuf"},
             timeout=10)
@@ -87,7 +87,7 @@ for i in range(10):
     msg = c_pb2.Coordinates( x_pr=X_,  y_pr=Y_,  z_pr=Z_,x= x_raw,y=y_raw,z=z_raw)
 
     try:
-        response = rq.session.post(
+        response = session.post(
             URL,
             data=msg.SerializeToString(),
             headers={

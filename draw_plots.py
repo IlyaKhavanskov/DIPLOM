@@ -34,8 +34,11 @@ with open('user_data.log','r', encoding='utf-8' ) as file:
         
         columns = line.strip().split('|') # список строк
 
-        for colomn in columns:
-            print(colomn)
+        # for colomn in columns:
+            # print(colomn)
+
+
+            
             
         if columns[1] not in user_ip :
             user_ip.add(columns[1])
@@ -103,17 +106,20 @@ pr_y = np.array(user.geodez_geoposition['y'], dtype=float)
 raw_z = np.array(user.raw_geoposition['z'], dtype=float)
 pr_z = np.array(user.geodez_geoposition['z'], dtype=float)
 
+
+print(f'количество пользователей {len(user_ip)} \n')
+
 if len(raw_x) == len(pr_x) and len(raw_x) > 0:
         err_x = np.abs(raw_x - pr_x)
         err_y = np.abs(raw_y - pr_y)
         err_z = np.abs(raw_z - pr_z)
 
-        print(f"\n📉 Средние абсолютные ошибки:")
+        print(f"\n Средние абсолютные ошибки:")
         print(f"   X: {np.mean(err_x):.4f}")
         print(f"   Y: {np.mean(err_y):.4f}")
         print(f"   Z: {np.mean(err_z):.4f}")
         
-        print(f"\n📈 Среднеквадратичные отклонения (RMS):")
+        print(f"\n Среднеквадратичные отклонения (RMS):")
         print(f"   X: {np.sqrt(np.mean(err_x**2)):.4f}")
         print(f"   Y: {np.sqrt(np.mean(err_y**2)):.4f}")
         print(f"   Z: {np.sqrt(np.mean(err_z**2)):.4f}")
