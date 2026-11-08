@@ -10,8 +10,7 @@ def parser_sp3(filename):
             # * Год Месяц День Час Минута Секунда
             if line.strip() and line.startswith('*'):
                 string = line.split()
-                current_epoch = f'Год {string[1]} месяц {string[2]} день {string[3]} час {string[4]} минута {string[5]} секунда {string[6]}'
-                print(current_epoch)
+                current_epoch = f'{int(string[1]):04d}-{int(string[2]):02d}-{int(string[3]):02d} {int(string[4]):02d}:{int(string[5]):02d}:{float(string[6]):06.3f}'
                 
 
                 epochs[current_epoch] = []
@@ -50,7 +49,7 @@ if __name__ == '__main__':
     #         print(sat)
 
 
-    print(result.keys())
+    print(f'Всего обработано эпох: {len(result)}')
 # parse_rinex.py, строка 6 — раскомментировать:
 from datetime import datetime
 

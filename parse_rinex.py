@@ -111,8 +111,8 @@ def parse_rinex(filename,epochs = None):
                 az_val     = line4[42:61].strip()
                 age_val    = line4[61:80].strip()
                 # Формируем дату и время эпохи
-                epoch = f'год {str1[1]} месяц {str1[2]} day {str1[3]} час {str1[4]} минута {str1[5]} секунда {str1[6]}'
-                
+                # Время занимает фиксированные колонки; split() может склеить секунды со смещением часов.
+                epoch = f'{int(line[4:8]):04d}-{int(line[9:11]):02d}-{int(line[12:14]):02d} {int(line[15:17]):02d}:{int(line[18:20]):02d}:{float(line[21:23]):06.3f}'
                 # Безопасно конвертируем в float/int с дефолтными значениями (0), если поле пустое
                 satellite = {
                     'R': str1[0],
@@ -146,6 +146,7 @@ def parse_rinex(filename,epochs = None):
 # Конец функции парсинга
 if __name__ == '__main__':
     filename = 'AGA100RUS_R_20263062115_01D_RN.rnx.gz'
+    # EKTG00RUS_R_20263081845_01D_RN.rnx.gz
     result = parse_rinex(filename)
     # parse_epoch(filename)
     # print( len(result.keys() ) )

@@ -1,70 +1,59 @@
+import math
+import statistics
+from datetime import datetime
+
 import parse_rinex as pr
 import parser_sp3_fixed as pf
 
-filename = 'AGA100RUS_R_20263062115_01D_RN.rnx.gz'
-rinex = pr.parse_rinex(filename)
+rinex = pr.parse_rinex('AGA100RUS_R_20263062115_01D_RN.rnx.gz')
+sp3 = pf.parser_sp3('COD0OPSRAP_20263060000_01D_05M_ORB.SP3.gz')
 
-filename = 'COD0OPSRAP_20263060000_01D_05M_ORB.SP3.gz'
-sp3 = pf.parser_sp3(filename)
+sp3_times = sorted(datetime.strptime(epoch, '%Y-%m-%d %H:%M:%S.%f') for epoch in sp3)
+differences_x, differences_y, differences_z, distances = [], [], [], []
+matched_epochs = set()
 
-coincidence  = [] # совпадения
-for key in rinex.keys() :
-    if key in sp3.keys():
-        coincidence.append(key)
-print('количество совпадений = ',len(coincidence))
+for epoch, rinex_sats in rinex.items():
+    t = datetime.strptime(epoch, '%Y-%m-%d %H:%M:%S.%f')
+    before = [time for time in sp3_times if time <= t]
+    after = [time for time in sp3_times if time >= t]
+    if not before or not after:
+        continue
 
-import math
-import statistics
+    t0, t1 = before[-1], after[0]
+    sats0 = {sat['R']: sat for sat in sp3[t0.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]]}
+    sats1 = {sat['R']: sat for sat in sp3[t1.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]]}
+    # Ключи эпох SP3 сохранены с точностью до миллисекунд.
+    if t0 == t1:
+        weight = 0.0
+    else:
+        weight = (t - t0).total_seconds() / (t1 - t0).total_seconds()
 
-differences_x = []
-differences_y = []
-differences_z = []
-distances = []
+    for sat in rinex_sats:
+        sat_id = sat['R']
+        if sat_id not in sats0 or sat_id not in sats1:
+            continue
+        ref0, ref1 = sats0[sat_id], sats1[sat_id]
+        dx = sat['x'] - (ref0['x'] + weight * (ref1['x'] - ref0['x']))
+        dy = sat['y'] - (ref0['y'] + weight * (ref1['y'] - ref0['y']))
+        dz = sat['z'] - (ref0['z'] + weight * (ref1['z'] - ref0['z']))
+        differences_x.append(dx)
+        differences_y.append(dy)
+        differences_z.append(dz)
+        distances.append(math.sqrt(dx**2 + dy**2 + dz**2))
+        matched_epochs.add(epoch)
 
-for key in coincidence:
-
-    sp3_satellites = {sat['R']: sat for sat in sp3[key]}
-
-    for satellite in rinex[key]:
-
-        sat_id = satellite['R']
-
-        if sat_id in sp3_satellites:
-
-            sat_sp3 = sp3_satellites[sat_id]
-
-            dx = satellite['x'] - sat_sp3['x']
-            dy = satellite['y'] - sat_sp3['y']
-            dz = satellite['z'] - sat_sp3['z']
-
-            differences_x.append(dx)
-            differences_y.append(dy)
-            differences_z.append(dz)
-
-            distance = math.sqrt(dx**2 + dy**2 + dz**2)
-            distances.append(distance)
-
+print('Совпавших эпох:', len(matched_epochs))
 if distances:
     n = len(distances)
-
-    rmse_x = math.sqrt(sum(x**2 for x in differences_x) / n)
-    rmse_y = math.sqrt(sum(y**2 for y in differences_y) / n)
-    rmse_z = math.sqrt(sum(z**2 for z in differences_z) / n)
-
-    rmse_3d = math.sqrt(
-        sum(d**2 for d in distances) / n
-    )
-
-    print('\nРезультаты сравнения с SP3:')
     print('Количество сравнений:', n)
-
     print('Среднее смещение X:', statistics.mean(differences_x), 'м')
     print('Среднее смещение Y:', statistics.mean(differences_y), 'м')
     print('Среднее смещение Z:', statistics.mean(differences_z), 'м')
-
-    print('RMSE X:', rmse_x, 'м')
-    print('RMSE Y:', rmse_y, 'м')
-    print('RMSE Z:', rmse_z, 'м')
-
-    print('Общий RMSE 3D:', rmse_3d, 'м')
+    print('RMSE X:', math.sqrt(sum(x*x for x in differences_x) / n), 'м')
+    print('RMSE Y:', math.sqrt(sum(y*y for y in differences_y) / n), 'м')
+    print('RMSE Z:', math.sqrt(sum(z*z for z in differences_z) / n), 'м')
+    print('Общий RMSE 3D:', math.sqrt(sum(d*d for d in distances) / n), 'м')
+    print('Средняя 3D ошибка:', statistics.mean(distances), 'м')
     print('Максимальное расхождение:', max(distances), 'м')
+else:
+    print('Нет общих спутников и эпох. Проверьте дату и спутниковые идентификаторы файлов.')
