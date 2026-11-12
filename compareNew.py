@@ -112,7 +112,10 @@ def count_difference(sp3, rinex, epochs = '2026-11-02 21:45:00.000'):
     #             2026-11-02 20:45:00.000
     #         '''
 
-    delta = defaultdict(lambda: {'dx': 0, 'dy': 0, 'dz': 0, '3d': 0, 'count': 0})
+    
+    delta = defaultdict(lambda: {'dx': 0, 'dy': 0, 'dz': 0, '3d': 0, 'count': 0,
+                                'sx2': 0, 'sy2': 0, 'sz2': 0})     
+
 
     for epoch in epochs.strip().splitlines():
         epoch = epoch.strip()
@@ -135,14 +138,18 @@ def count_difference(sp3, rinex, epochs = '2026-11-02 21:45:00.000'):
                     delta[sat_id]['3d'] += math.sqrt(dx**2 + dy**2 + dz**2)
                     delta[sat_id]['count'] += 1
 
-    for sat_id, values in delta.items():
-        count = values['count']
-        values['dx'] /= count
-        values['dy'] /= count
-        values['dz'] /= count
-        values['3d'] /= count
-        print(sat_id, values)
+                    delta[sat_id]['sx2'] += dx * dx
+                    delta[sat_id]['sy2'] += dy * dy
+                    delta[sat_id]['sz2'] += dz * dz
 
+    for sat_id, v in delta.items():
+        n = v['count']
+        for k in ('dx', 'dy', 'dz', '3d', 'sx2', 'sy2', 'sz2'):
+            v[k] /= n
+        v['sx'] = math.sqrt(max(v['sx2'] - v['dx'] ** 2, 0.0))
+        v['sy'] = math.sqrt(max(v['sy2'] - v['dy'] ** 2, 0.0))
+        v['sz'] = math.sqrt(max(v['sz2'] - v['dz'] ** 2, 0.0))
+        print(sat_id, v)
     return delta
 
 
